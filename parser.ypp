@@ -1,0 +1,370 @@
+%{
+    #include <cstdio>
+    #include <cstdlib>
+
+    #include "ast.hpp"
+    #include "primitive.hpp"
+    #include "symtab.hpp"
+
+    #define YYDEBUG 1
+
+    extern Program_ptr ast;
+    int yylex(void);
+    void yyerror(const char *);
+%}
+
+/* Enables verbose error messages */
+%error-verbose
+
+/** WRITE ME:
+ *  - Put all your token definitions here
+ *  - Put all your type definitions here
+ *  - Put all your precedence/associativity rules here
+ */
+
+ %token BROKEN
+%token BOOLEAN
+%token CHAR
+%token INTEGER
+%token STRING
+%token INTPTR
+%token CHARPTR
+%token IF
+%token ELSE
+%token WHILE
+%token VAR
+%token PROCEDURE
+%token RETURN
+%token N
+%token EQUAL
+
+%token BOOLEAN_LITERAL
+%token CHAR_LITERAL
+%token INTEGER_LITERAL
+%token STRING_LITERAL
+%token IDENTIFIER
+%token POINTER_LITERAL
+
+%token SEMICOLON
+%token COLON
+%token COMMA
+%token BAR
+%token LCURLY
+%token RCURLY
+%token LPAREN
+%token RPAREN
+%token LSQUARE
+%token RSQUARE
+%token COMMENT
+
+%left OROR
+%left ANDAND
+%left EQUALEQUAL BANGEQUAL
+%left LESS LESSEQUAL GREATER GREATEREQUAL
+%left PLUS MINUS
+%left TIMES SLASH
+%right UMINUS UPLUS BANG CARET AND
+
+%%
+S: Start {
+#ifdef DEBUG
+cout << "Start" << endl;
+#endif
+     ast = new ProgramImpl($1.u_proc_list);
+ } ;
+
+Start:  Procedure Procedures {
+#ifdef DEBUG
+cout << "New Start" << endl;
+#endif
+         $$.u_proc_list = new std::list<Proc_ptr>;
+         $$.u_proc_list->push_front($1.u_proc);
+         $$.u_proc_list->insert($$.u_proc_list->end(), $2.u_proc_list->begin(), $2.u_proc_list->end());
+};
+
+Procedures: Procedure Procedures {
+#ifdef DEBUG
+cout << "New Procedure List" << endl;
+#endif
+             $$.u_proc_list = new std::list<Proc_ptr>;
+             $$.u_proc_list->push_front($1.u_proc);
+             $$.u_proc_list->insert($$.u_proc_list->end(), $2.u_proc_list->begin(), $2.u_proc_list->end());
+         }
+         | %empty {
+#ifdef DEBUG
+cout << "New Procedure List (nil)" << endl;
+#endif
+             $$.u_proc_list = new std::list<Proc_ptr>;
+         };
+
+Procedure: PROCEDURE IDENTIFIER LPAREN Paramlist RPAREN RETURN Param_types LCURLY Block RCURLY {
+#ifdef DEBUG
+cout << "New Procedure: " << $2.u_base_charptr << endl;
+#endif
+           $$.u_proc = new ProcImpl(new SymName($2.u_base_charptr),
+                                         $4.u_decl_list,
+                                         $7.u_type,
+                                         $9.u_procedure_block);
+       };
+
+
+/* Handle Paramlist */
+Paramlist: Param_id_list Paramlist_prime{
+#ifdef DEBUG
+cout << "ParamList" << endl;
+#endif
+           $$.u_decl_list = $2.u_decl_list;
+           $$.u_decl_list->push_front($1.u_decl);
+       }
+       | %empty {
+#ifdef DEBUG
+cout << "Empty Paramlist" << endl;
+#endif
+           $$.u_decl_list = new std::list<Decl_ptr>;
+       };
+Paramlist_prime: SEMICOLON Param_id_list Paramlist_prime {
+#ifdef DEBUG
+cout << "Paramlist Prime" << endl;
+#endif
+                   $$.u_decl_list = new std::list<Decl_ptr>;
+                   $$.u_decl_list->push_front($2.u_decl);
+                   $$.u_decl_list->insert($$.u_decl_list->end(),
+                                          $3.u_decl_list->begin(),
+                                          $3.u_decl_list->end());
+               }
+               | %empty {
+#ifdef DEBUG
+cout << "Empty Paramlist prime" << endl;
+#endif
+                   $$.u_decl_list = new std::list<Decl_ptr>;
+               };
+Param_id_list: IDENTIFIER Param_id_list_prime COLON Param_types {
+#ifdef DEBUG
+cout << "Param_id list: " << $1.u_base_charptr << endl;
+#endif
+                 std::list<SymName_ptr> *m = $2.u_symname_list;
+                 SymName * x = new SymName($1.u_base_charptr);
+                 m->push_front(x);
+                 $$.u_decl = new DeclImpl(m, $4.u_type);
+             };
+Param_id_list_prime: COMMA IDENTIFIER Param_id_list_prime {
+#ifdef DEBUG
+cout << "Param_id_list_prime: " << $2.u_base_charptr << endl;
+#endif
+                       $$.u_symname_list = new std::list<SymName_ptr>;
+                       SymName * x = new SymName($2.u_base_charptr);
+                       $$.u_symname_list->push_front(x);
+                       $$.u_symname_list->insert($$.u_symname_list->end(),
+                                                 $3.u_symname_list->begin(),
+                                                 $3.u_symname_list->end());
+                   }
+                   | %empty {
+#ifdef DEBUG
+cout << "Empty param_id_list_prime" << endl;
+#endif
+                       $$.u_symname_list = new std::list<SymName_ptr>;
+                   };
+
+Param_types:  INTEGER   { $$.u_type = new TInteger;   }
+           | BOOLEAN { $$.u_type = new TBoolean;   }
+           | CHAR    { $$.u_type = new TCharacter; }
+           | CHARPTR { $$.u_type = new TCharPtr;   }
+           | INTPTR  { $$.u_type = new TIntPtr;    };
+
+/* Handle Block */
+Block:  Procedures Declarations Statements Return {
+#ifdef DEBUG
+cout << "New Procedure Block." << endl;
+#endif
+         $$.u_procedure_block = new Procedure_blockImpl($1.u_proc_list, $2.u_decl_list, $3.u_stat_list, $4.u_return_stat);
+     };
+
+/* Handle Variable Declarations */
+Declarations: Block_id_list SEMICOLON Declarations {
+#ifdef DEBUG
+cout << "New Declarations" << endl;
+#endif
+               $$.u_decl_list = $3.u_decl_list;
+               $$.u_decl_list->push_front($1.u_decl);
+           }
+           | %empty {
+#ifdef DEBUG
+cout << "New Declarations (nil)"<< endl;
+#endif
+               std::list<Decl_ptr> * decl = new std::list<Decl_ptr>;
+               $$.u_decl_list = decl;
+           };
+
+Block_id_list:  VAR IDENTIFIER Block_id_list_prime COLON Block_types {
+#ifdef DEBUG
+cout << "Block id list: " << $2.u_base_charptr << endl;
+#endif
+                 std::list<SymName_ptr> *y = $3.u_symname_list;
+                 SymName *x = new SymName($2.u_base_charptr);
+                 y->push_front(x);
+                 $$.u_decl = new DeclImpl(y, $5.u_type);
+             };
+Block_id_list_prime:  COMMA IDENTIFIER Block_id_list_prime {
+#ifdef DEBUG
+cout << "Block_id_list_prime: " << $2.u_base_charptr << endl;
+#endif
+                       $$.u_symname_list = new std::list<SymName_ptr>;
+                       SymName * x = new SymName($2.u_base_charptr);
+                       $$.u_symname_list->push_front(x);
+                       $$.u_symname_list->insert($$.u_symname_list->end(),
+                                                 $3.u_symname_list->begin(),
+                                                 $3.u_symname_list->end());
+                   }
+                   | %empty {
+#ifdef DEBUG
+cout << "Empty Block id list prime" << endl;
+#endif
+                       $$.u_symname_list = new std::list<SymName_ptr>;
+                   };
+
+Block_types:  Param_types {
+#ifdef DEBUG
+cout << "Block types" << endl;
+#endif
+               $$.u_type = $1.u_type;
+           }
+           | STRING LSQUARE INTEGER_LITERAL RSQUARE {
+#ifdef DEBUG
+cout << "Block Types" << endl;
+#endif
+               $$.u_type = new TString( new Primitive($3.u_base_int) );
+           };
+
+/* Handle Statements */
+Statements: Statement Statements {
+#ifdef DEBUG
+cout << "Statements" << endl;
+#endif
+             $$.u_stat_list = $2.u_stat_list;
+             $$.u_stat_list->push_front($1.u_stat);
+         }
+         | %empty {
+#ifdef DEBUG
+cout << "New statements (nil)" << endl;
+#endif
+             std::list<Stat_ptr> * l = new std::list<Stat_ptr>;
+             $$.u_stat_list = l;
+         };
+
+Statement:  Assign        { $$.u_stat = $1.u_stat; }
+         | Function    { $$.u_stat = $1.u_stat; }
+         | If          { $$.u_stat = $1.u_stat; }
+         | IfElse      { $$.u_stat = $1.u_stat; }
+         | While       { $$.u_stat = $1.u_stat; }
+         | Code_block  {
+             $$.u_stat = new CodeBlock($1.u_nested_block);
+         };
+
+Assign: Lhs EQUAL Expr SEMICOLON {
+#ifdef DEBUG
+cout << "Assign" << endl;
+#endif
+         $$.u_stat = new Assignment($1.u_lhs, $3.u_expr);
+     }
+     | Lhs EQUAL STRING_LITERAL SEMICOLON {
+#ifdef DEBUG
+cout << "ASSIGN" << endl;
+#endif
+         $$.u_stat = new StringAssignment($1.u_lhs, new StringPrimitive($3.u_base_charptr));
+     };
+
+Lhs:  IDENTIFIER {
+       $$.u_lhs = new Variable(new SymName($1.u_base_charptr));
+   }
+   | IDENTIFIER LSQUARE Expr RSQUARE {
+       $$.u_lhs = new ArrayElement(new SymName($1.u_base_charptr), $3.u_expr);
+   }
+   | CARET IDENTIFIER {
+       $$.u_lhs = new DerefVariable(new SymName($2.u_base_charptr));
+   };
+
+Function: Lhs EQUAL IDENTIFIER LPAREN Idlist RPAREN SEMICOLON {
+           $$.u_stat = new Call($1.u_lhs,
+                                new SymName($3.u_base_charptr),
+                                $5.u_expr_list);
+       };
+
+Idlist: Expr Idlist_prime {
+         $$.u_expr_list = $2.u_expr_list;
+         $$.u_expr_list->push_front($1.u_expr);
+     }
+     | %empty {
+         $$.u_expr_list = new std::list<Expr_ptr>;
+     };
+Idlist_prime: COMMA Expr Idlist_prime {
+               $$.u_expr_list = $3.u_expr_list;
+               $$.u_expr_list->push_front($2.u_expr);
+           }
+           | %empty {
+               $$.u_expr_list = new std::list<Expr_ptr>;
+           };
+
+If: IF LPAREN Expr RPAREN Code_block {
+     $$.u_stat = new IfNoElse($3.u_expr, $5.u_nested_block);
+ };
+IfElse: IF LPAREN Expr RPAREN Code_block ELSE Code_block{
+         $$.u_stat = new IfWithElse($3.u_expr,
+                                    $5.u_nested_block,
+                                    $7.u_nested_block);
+     };
+
+While:  WHILE LPAREN Expr RPAREN Code_block {
+         $$.u_stat = new WhileLoop($3.u_expr, $5.u_nested_block);
+     };
+Code_block: LCURLY Declarations Statements RCURLY{
+             $$.u_nested_block = new Nested_blockImpl($2.u_decl_list, $3.u_stat_list);
+             // $$.u_stat = new CodeBlock(new Nested_blockImpl($2.u_decl_list, $3.u_stat_list));
+         };
+Return: RETURN Expr SEMICOLON {
+         $$.u_return_stat = new Return($2.u_expr);
+     };
+
+Expr: Expr OROR Expr { $$.u_expr = new Or($1.u_expr, $3.u_expr); }
+   | Expr ANDAND Expr { $$.u_expr = new And($1.u_expr, $3.u_expr); }
+   | Expr EQUALEQUAL Expr { $$.u_expr = new Compare($1.u_expr, $3.u_expr); }
+   | Expr BANGEQUAL Expr { $$.u_expr = new Noteq($1.u_expr, $3.u_expr); }
+   | Expr LESS Expr { $$.u_expr = new Lt($1.u_expr, $3.u_expr); }
+   | Expr LESSEQUAL Expr { $$.u_expr = new Lteq($1.u_expr, $3.u_expr); }
+   | Expr GREATER Expr { $$.u_expr = new Gt($1.u_expr, $3.u_expr); }
+   | Expr GREATEREQUAL Expr { $$.u_expr = new Gteq($1.u_expr, $3.u_expr); }
+   | Expr PLUS Expr { $$.u_expr = new Plus($1.u_expr, $3.u_expr); }
+   | Expr MINUS Expr { $$.u_expr = new Minus($1.u_expr, $3.u_expr); }
+   | Expr TIMES Expr { $$.u_expr = new Times($1.u_expr, $3.u_expr); }
+   | Expr SLASH Expr { $$.u_expr = new Div($1.u_expr, $3.u_expr); }
+   | MINUS Expr %prec UMINUS { $$.u_expr = new Uminus($2.u_expr); }
+   | PLUS Expr %prec UPLUS { $$.u_expr = $2.u_expr; }
+   | BANG Expr { $$.u_expr = new Not($2.u_expr); }
+   | CARET Expr { $$.u_expr = new Deref($2.u_expr); }
+   | LPAREN Expr RPAREN { $$.u_expr = $2.u_expr; }
+   | N { $$.u_expr = new NullLit(); }
+   | BOOLEAN_LITERAL { $$.u_expr = new BoolLit( new Primitive( $1.u_base_int ) ); }
+   | INTEGER_LITERAL { $$.u_expr = new IntLit( new Primitive( $1.u_base_int ) ); }
+   | CHAR_LITERAL { $$.u_expr = new CharLit( new Primitive( $1.u_base_int ) ); }
+   | BAR Expr BAR { $$.u_expr = new AbsoluteValue($2.u_expr); }
+   | Pointerexpr { $$.u_expr = $1.u_expr; }
+   | IDENTIFIER { $$.u_expr = new Ident(new SymName($1.u_base_charptr));}
+   | IDENTIFIER LSQUARE Expr RSQUARE {
+       $$.u_expr = new ArrayAccess(new SymName($1.u_base_charptr), $3.u_expr);
+   };
+
+Pointerexpr:  AND IDENTIFIER {
+               $$.u_expr = new AddressOf(new Variable(new SymName($2.u_base_charptr)));
+           }
+           | AND IDENTIFIER LSQUARE Expr RSQUARE {
+               $$.u_expr = new AddressOf(new ArrayElement(new SymName($2.u_base_charptr), $4.u_expr));
+           };
+
+%%
+
+extern int yylineno;
+
+void yyerror(const char *s)
+{
+    fprintf(stderr, "%s at line %d\n", s, yylineno);
+    exit(1);
+}

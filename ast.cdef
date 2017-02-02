@@ -1,0 +1,62 @@
+# CDEF file for lang
+
+Program ==> *Proc
+
+Proc ==>  SymName *Decl Type Procedure_block
+
+
+Procedure_block ==> *Proc *Decl *Stat Return_stat
+Nested_block ==> *Decl *Stat
+
+Decl ==> *SymName Type
+
+Stat:Assignment ==> Lhs Expr
+Stat:StringAssignment ==> Lhs StringPrimitive
+
+Stat:Call ==> Lhs SymName *Expr
+Stat:IfNoElse ==> Expr Nested_block
+Stat:IfWithElse ==> Expr Nested_block Nested_block
+Stat:WhileLoop ==>  Expr Nested_block
+Stat:CodeBlock ==>  Nested_block
+
+Return_stat:Return ==> Expr
+
+Type:TInteger ==>
+Type:TCharacter ==>
+Type:TBoolean ==>
+Type:TCharPtr ==>
+Type:TIntPtr ==>
+Type:TString ==> Primitive
+
+Expr:AbsoluteValue ==> Expr
+Expr:AddressOf ==> Lhs
+Expr:And ==> Expr Expr
+Expr:Div ==> Expr Expr
+Expr:Compare ==> Expr Expr
+Expr:Gt ==> Expr Expr
+Expr:Gteq ==> Expr Expr
+Expr:Lt ==> Expr Expr
+Expr:Lteq ==> Expr Expr
+Expr:Minus ==> Expr Expr
+Expr:Noteq ==> Expr Expr
+Expr:Or ==> Expr Expr
+Expr:Plus ==> Expr Expr
+Expr:Times ==> Expr Expr
+Expr:Not ==> Expr
+Expr:Uminus ==> Expr
+Expr:Ident ==> SymName
+Expr:ArrayAccess ==> SymName Expr
+Expr:IntLit ==> Primitive
+Expr:CharLit ==> Primitive
+Expr:BoolLit ==> Primitive
+Expr:NullLit ==>
+Expr:Deref ==> Expr
+
+Lhs:Variable ==> SymName
+Lhs:DerefVariable ==> SymName
+Lhs:ArrayElement ==> SymName Expr
+
+# these classes should not be generated automagically
+SymName external "symtab.hpp"
+Primitive external "primitive.hpp"
+StringPrimitive external "primitive.hpp"
