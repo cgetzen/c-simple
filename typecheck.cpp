@@ -4,7 +4,7 @@
 
 #include "ast.hpp"
 #include "symtab.hpp"
-#include "primitive.hpp"
+#include "primitive.hpp" 
 #include "assert.h"
 
 #define MAINSTR string("Main")
