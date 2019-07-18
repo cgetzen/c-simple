@@ -32,7 +32,7 @@ class Typecheck : public Visitor {
         proc_undef,
         call_type_mismatch,
         narg_mismatch,
-        expr_type_err,
+         expr_type_err,
         var_undef,          // check_call()
         ifpred_err,         // check_pred_if()
         whilepred_err,      // check_pred_while()
