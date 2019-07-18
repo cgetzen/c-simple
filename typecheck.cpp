@@ -18,7 +18,7 @@ using namespace std;
 #include <typeinfo>
 
 class Typecheck : public Visitor {
-  private:
+  private: 
     FILE* m_errorfile;
     SymTab* m_st;
 
